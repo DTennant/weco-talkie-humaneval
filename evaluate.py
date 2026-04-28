@@ -27,7 +27,7 @@ from harness import generate_completion
 
 
 def evaluate(
-    model_name: str = "talkie-1930-13b-base",
+    model_name: str = "talkie-1930-13b-it",
     num_samples_per_task: int = 100,
     timeout: float = 10.0,
     max_problems: Optional[int] = None,
@@ -126,7 +126,7 @@ def evaluate(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Talkie on HumanEval")
-    parser.add_argument("--model", default="talkie-1930-13b-base", help="Model name")
+    parser.add_argument("--model", default="talkie-1930-13b-it", help="Model name")
     parser.add_argument("--samples", type=int, default=100, help="Samples per problem (100 to match Talkie blog pass@100)")
     parser.add_argument("--timeout", type=float, default=10.0, help="Execution timeout (s)")
     parser.add_argument("--max-problems", type=int, default=None, help="Max problems to eval (for debugging)")

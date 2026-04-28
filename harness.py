@@ -1,5 +1,5 @@
 """
-Harness for prompting Talkie-1930-13b on HumanEval problems.
+Harness for prompting Talkie-1930-13b-it on HumanEval problems.
 
 This file is what Weco optimizes. It controls:
   1. ICL example selection — which solved problems to show the model
@@ -20,7 +20,7 @@ from datasets import load_dataset
 # ──────────────────────────────────────────────────────────────────────────────
 
 NUM_ICL_EXAMPLES = 3
-TEMPERATURE = 0.6
+TEMPERATURE = 0.8
 MAX_TOKENS = 512
 
 # ICL example selection strategy: "random", "fixed", "similar_length"
@@ -40,8 +40,6 @@ FIXED_ICL_INDICES = [
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ICL Example Pool
-# We pre-define a pool of (prompt, canonical_solution) pairs from HumanEval
-# that have short, simple solutions the model can learn patterns from.
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _load_humaneval():
@@ -90,7 +88,7 @@ def select_icl_examples(target_task_id: str, n: int = NUM_ICL_EXAMPLES) -> list[
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Prompt Template
+# Prompt Template (using Talkie IT chat format)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def format_icl_example(example: dict) -> str:
@@ -100,25 +98,26 @@ def format_icl_example(example: dict) -> str:
     return f"{prompt}{solution}"
 
 
-def build_prompt(target_task: dict, icl_examples: list[dict]) -> str:
+def build_user_message(target_task: dict, icl_examples: list[dict]) -> str:
     """
-    Build the full prompt for the model.
+    Build the user message content for the IT model's chat template.
     
-    Structure:
-    - Brief instruction
-    - ICL examples (complete functions)
-    - Target problem (prompt only, model completes it)
+    The Talkie IT model uses:
+        <|user|>{content}<|end|><|assistant|>
+    
+    We put the ICL examples + target problem as the user message content,
+    and let the model generate the completion as the assistant turn.
     """
     parts = []
     
-    # Instruction header
+    # Instruction
     parts.append(
         "Below are Python function implementations. "
         "Complete the last function following the same pattern.\n\n"
     )
     
-    # ICL examples
-    for i, ex in enumerate(icl_examples):
+    # ICL examples (complete functions)
+    for ex in icl_examples:
         parts.append(format_icl_example(ex))
         parts.append("\n\n")
     
@@ -166,10 +165,13 @@ def generate_completion(
     num_samples: int = 1,
 ) -> list[str]:
     """
-    Generate code completions for a HumanEval task.
+    Generate code completions for a HumanEval task using Talkie IT model.
+    
+    Uses the IT model's chat template via model.generate(), which automatically
+    wraps the prompt with <|user|>...<|end|><|assistant|>.
     
     Args:
-        model: A Talkie model instance
+        model: A Talkie model instance (should be talkie-1930-13b-it)
         task_id: HumanEval task ID (e.g., "HumanEval/0")
         num_samples: Number of completions to generate (for pass@k)
     
@@ -182,14 +184,14 @@ def generate_completion(
     # Select and format ICL examples
     icl_examples = select_icl_examples(task_id)
     
-    # Build the full prompt
-    full_prompt = build_prompt(target_task, icl_examples)
+    # Build the user message (model.generate handles the IT template wrapping)
+    user_message = build_user_message(target_task, icl_examples)
     
     # Generate completions
     completions = []
     for _ in range(num_samples):
         result = model.generate(
-            full_prompt,
+            user_message,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
         )

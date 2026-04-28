@@ -4,6 +4,8 @@ Optimizing [Talkie-1930-13b](https://huggingface.co/talkie-lm/talkie-1930-13b-ba
 
 **Thesis:** Talkie-1930-13b has never seen code during pre-training (pre-1931 data), yet it can solve simple HumanEval problems via in-context learning. By optimizing the *harness* (ICL example selection, prompt format, output parsing) with Weco's tree search, we can unlock more of this latent capability — without changing model weights.
 
+We use the **instruction-tuned** model (`talkie-1930-13b-it`) by default, with its chat template (`<|user|>...<|end|><|assistant|>`).
+
 ## Setup
 
 ### Prerequisites
@@ -29,7 +31,7 @@ pip install weco
 ### Download the model (first time)
 
 ```bash
-python -c "from talkie import download_model; download_model('talkie-1930-13b-base')"
+python -c "from talkie import download_model; download_model('talkie-1930-13b-it')"
 ```
 
 ## Usage
@@ -40,7 +42,7 @@ python -c "from talkie import download_model; download_model('talkie-1930-13b-ba
 python evaluate.py
 ```
 
-This runs Talkie-1930-13b on HumanEval with the default harness and prints `pass_at_1`, `pass_at_10`, and `pass_at_100` (the primary metric from the Talkie blog, Figure 3).
+This runs Talkie-1930-13b-it on HumanEval with the default harness and prints `pass_at_1`, `pass_at_10`, and `pass_at_100` (the primary metric from the Talkie blog, Figure 3).
 
 ### 2. Optimize the harness with Weco
 
@@ -51,7 +53,7 @@ weco run \
   --metric pass_at_100 \
   --goal maximize \
   --steps 50 \
-  --additional-instructions "Optimize the ICL example selection strategy, prompt template, and output parsing to maximize HumanEval pass@100 for a vintage language model that has never seen code. The model is talkie-1930-13b-base. Do NOT modify the model or the evaluation logic — only optimize the harness (how we prompt the model). Key constraints: the model has 13B params, pre-1931 training data only, and limited context window."
+  --additional-instructions "Optimize the ICL example selection strategy, prompt template, and output parsing to maximize HumanEval pass@100 for a vintage language model that has never seen code. The model is talkie-1930-13b-it (instruction-tuned, chat template: <|user|>...<|end|><|assistant|>). Do NOT modify the model or the evaluation logic — only optimize the harness (how we prompt the model). Key constraints: the model has 13B params, pre-1931 training data only, and 2048 token context window."
 ```
 
 ### 3. Check results on the dashboard
