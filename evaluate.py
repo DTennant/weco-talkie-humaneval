@@ -28,7 +28,7 @@ from harness import generate_completion
 
 def evaluate(
     model_name: str = "talkie-1930-13b-base",
-    num_samples_per_task: int = 10,
+    num_samples_per_task: int = 100,
     timeout: float = 10.0,
     max_problems: Optional[int] = None,
 ):
@@ -37,7 +37,8 @@ def evaluate(
     
     Args:
         model_name: Which Talkie model to use
-        num_samples_per_task: Number of completions per problem (for pass@k)
+        num_samples_per_task: Number of completions per problem (for pass@k).
+            Default 100 to match Talkie blog's pass@100 metric.
         timeout: Seconds to allow each code execution
         max_problems: If set, only evaluate this many problems (for faster iteration)
     """
@@ -98,31 +99,35 @@ def evaluate(
     
     pass_at_1 = estimate_pass_at_k(total, num_correct, 1).mean()
     
+    pass_at_10 = 0.0
     if num_samples_per_task >= 10:
         pass_at_10 = estimate_pass_at_k(total, num_correct, 10).mean()
-    else:
-        pass_at_10 = 0.0
+    
+    pass_at_100 = 0.0
+    if num_samples_per_task >= 100:
+        pass_at_100 = estimate_pass_at_k(total, num_correct, 100).mean()
     
     num_solved = (num_correct > 0).sum()
     
-    # Print metrics for Weco to read
+    # Print metrics for Weco to read (pass@100 is the primary metric from Talkie blog)
     print(f"pass_at_1: {pass_at_1:.4f}")
     print(f"pass_at_10: {pass_at_10:.4f}")
+    print(f"pass_at_100: {pass_at_100:.4f}")
     print(f"problems_solved: {num_solved}/{len(problems)}")
     
     # Also print to stderr for human readability
     print(f"\n{'='*50}", file=sys.stderr)
-    print(f"Results: pass@1={pass_at_1:.4f}, pass@10={pass_at_10:.4f}", file=sys.stderr)
-    print(f"Solved: {num_solved}/{len(problems)} problems", file=sys.stderr)
+    print(f"Results: pass@1={pass_at_1:.4f}, pass@10={pass_at_10:.4f}, pass@100={pass_at_100:.4f}", file=sys.stderr)
+    print(f"Solved: {num_solved}/{len(problems)} problems (at least 1 correct out of {num_samples_per_task})", file=sys.stderr)
     print(f"{'='*50}", file=sys.stderr)
     
-    return pass_at_1, pass_at_10
+    return pass_at_1, pass_at_10, pass_at_100
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Talkie on HumanEval")
     parser.add_argument("--model", default="talkie-1930-13b-base", help="Model name")
-    parser.add_argument("--samples", type=int, default=10, help="Samples per problem")
+    parser.add_argument("--samples", type=int, default=100, help="Samples per problem (100 to match Talkie blog pass@100)")
     parser.add_argument("--timeout", type=float, default=10.0, help="Execution timeout (s)")
     parser.add_argument("--max-problems", type=int, default=None, help="Max problems to eval (for debugging)")
     

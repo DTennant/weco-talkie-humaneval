@@ -40,7 +40,7 @@ python -c "from talkie import download_model; download_model('talkie-1930-13b-ba
 python evaluate.py
 ```
 
-This runs Talkie-1930-13b on HumanEval with the default harness and prints `pass_at_1` and `pass_at_10`.
+This runs Talkie-1930-13b on HumanEval with the default harness and prints `pass_at_1`, `pass_at_10`, and `pass_at_100` (the primary metric from the Talkie blog, Figure 3).
 
 ### 2. Optimize the harness with Weco
 
@@ -48,10 +48,10 @@ This runs Talkie-1930-13b on HumanEval with the default harness and prints `pass
 weco run \
   --source harness.py \
   --eval-command "python evaluate.py" \
-  --metric pass_at_1 \
+  --metric pass_at_100 \
   --goal maximize \
   --steps 50 \
-  --additional-instructions "Optimize the ICL example selection strategy, prompt template, and output parsing to maximize HumanEval pass@1 for a vintage language model that has never seen code. The model is talkie-1930-13b-base. Do NOT modify the model or the evaluation logic — only optimize the harness (how we prompt the model). Key constraints: the model has 13B params, pre-1931 training data only, and limited context window."
+  --additional-instructions "Optimize the ICL example selection strategy, prompt template, and output parsing to maximize HumanEval pass@100 for a vintage language model that has never seen code. The model is talkie-1930-13b-base. Do NOT modify the model or the evaluation logic — only optimize the harness (how we prompt the model). Key constraints: the model has 13B params, pre-1931 training data only, and limited context window."
 ```
 
 ### 3. Check results on the dashboard
