@@ -7,6 +7,9 @@ This file is what Weco optimizes. It controls:
   3. Output parsing — how to extract code from the model's generation
   4. Generation parameters — temperature, max_tokens, etc.
 
+Uses the Talkie IT model's chat API (model.chat with Message objects).
+Baseline: single-turn chat (one user message with ICL examples + target).
+
 Do NOT put evaluation logic here. That lives in evaluate.py.
 """
 
@@ -14,6 +17,7 @@ import re
 import random
 from typing import Optional
 from datasets import load_dataset
+from talkie import Message
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration (Weco will explore variations of these)
@@ -69,12 +73,10 @@ def select_icl_examples(target_task_id: str, n: int = NUM_ICL_EXAMPLES) -> list[
     pool = {k: v for k, v in humaneval.items() if k != target_task_id}
     
     if ICL_SELECTION_STRATEGY == "fixed":
-        # Use pre-selected examples known to have short solutions
         indices = [idx for idx in FIXED_ICL_INDICES if idx != target_task_id]
         examples = [pool[idx] for idx in indices[:n] if idx in pool]
         
     elif ICL_SELECTION_STRATEGY == "similar_length":
-        # Select examples with similar prompt length to the target
         target_len = len(humaneval[target_task_id]["prompt"])
         sorted_pool = sorted(pool.values(), key=lambda x: abs(len(x["prompt"]) - target_len))
         examples = sorted_pool[:n]
@@ -88,26 +90,24 @@ def select_icl_examples(target_task_id: str, n: int = NUM_ICL_EXAMPLES) -> list[
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Prompt Template (using Talkie IT chat format)
+# Prompt Template
 # ──────────────────────────────────────────────────────────────────────────────
 
 def format_icl_example(example: dict) -> str:
     """Format a single ICL example (prompt + solution)."""
-    prompt = example["prompt"]
-    solution = example["canonical_solution"]
-    return f"{prompt}{solution}"
+    return f"{example['prompt']}{example['canonical_solution']}"
 
 
-def build_user_message(target_task: dict, icl_examples: list[dict]) -> str:
+def build_messages(target_task: dict, icl_examples: list[dict]) -> list[Message]:
     """
-    Build the user message content for the IT model's chat template.
+    Build the chat messages for the IT model.
     
-    The Talkie IT model uses:
-        <|user|>{content}<|end|><|assistant|>
+    Baseline: single user turn containing ICL examples + target problem.
+    The model responds as assistant with the completion.
     
-    We put the ICL examples + target problem as the user message content,
-    and let the model generate the completion as the assistant turn.
+    Chat template: <|user|>{content}<|end|><|assistant|>
     """
+    # Build user message content
     parts = []
     
     # Instruction
@@ -121,22 +121,28 @@ def build_user_message(target_task: dict, icl_examples: list[dict]) -> str:
         parts.append(format_icl_example(ex))
         parts.append("\n\n")
     
-    # Target problem (just the prompt/signature + docstring)
+    # Target problem (just the prompt/signature + docstring, model completes it)
     parts.append(target_task["prompt"])
     
-    return "".join(parts)
+    user_content = "".join(parts)
+    
+    messages = [
+        Message(role="user", content=user_content),
+    ]
+    
+    return messages
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Output Parsing
 # ──────────────────────────────────────────────────────────────────────────────
 
-def parse_completion(raw_output: str, prompt: str) -> str:
+def parse_completion(raw_output: str) -> str:
     """
     Extract the function body from the model's raw output.
     
-    The model's generation should continue from where the prompt left off.
-    We need to extract just the function body and stop at the right place.
+    The model generates the continuation of the function.
+    We stop at markers that indicate the function is done.
     """
     completion = raw_output
     
@@ -147,7 +153,7 @@ def parse_completion(raw_output: str, prompt: str) -> str:
         if idx != -1:
             completion = completion[:idx]
     
-    # Also stop at triple backticks (model might try to close a code block)
+    # Stop at triple backticks
     idx = completion.find("```")
     if idx != -1:
         completion = completion[:idx]
@@ -165,39 +171,37 @@ def generate_completion(
     num_samples: int = 1,
 ) -> list[str]:
     """
-    Generate code completions for a HumanEval task using Talkie IT model.
+    Generate code completions for a HumanEval task using Talkie IT chat API.
     
-    Uses the IT model's chat template via model.generate(), which automatically
-    wraps the prompt with <|user|>...<|end|><|assistant|>.
+    Uses model.chat() with Message objects — single turn (one user message).
     
     Args:
-        model: A Talkie model instance (should be talkie-1930-13b-it)
+        model: A Talkie model instance (talkie-1930-13b-it)
         task_id: HumanEval task ID (e.g., "HumanEval/0")
         num_samples: Number of completions to generate (for pass@k)
     
     Returns:
-        List of completion strings (just the function body, not the prompt)
+        List of completion strings (just the function body)
     """
     humaneval = get_humaneval()
     target_task = humaneval[task_id]
     
-    # Select and format ICL examples
+    # Select ICL examples
     icl_examples = select_icl_examples(task_id)
     
-    # Build the user message (model.generate handles the IT template wrapping)
-    user_message = build_user_message(target_task, icl_examples)
+    # Build chat messages
+    messages = build_messages(target_task, icl_examples)
     
     # Generate completions
     completions = []
     for _ in range(num_samples):
-        result = model.generate(
-            user_message,
+        result = model.chat(
+            messages,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
         )
         
-        # Parse the raw output
-        completion = parse_completion(result.text, target_task["prompt"])
+        completion = parse_completion(result.text)
         completions.append(completion)
     
     return completions
